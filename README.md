@@ -8,7 +8,7 @@
 
 **Adapter package for torch_musa to act exactly like PyTorch CUDA**
 
-torchada provides a unified interface that works transparently on both NVIDIA GPUs (CUDA) and Moore Threads GPUs (MUSA). Write your code once using standard PyTorch CUDA APIs, and it will run on MUSA hardware without any changes.
+torchada provides a unified interface that works transparently on both Moore Threads GPUs (MUSA) and NVIDIA GPUs (CUDA). Write your code once using standard PyTorch CUDA APIs, and it will run on MUSA hardware without any changes.
 
 ## Features
 
@@ -17,7 +17,7 @@ torchada provides a unified interface that works transparently on both NVIDIA GP
 - **Transparent Device Mapping**: `tensor.cuda()` and `tensor.to("cuda")` work on MUSA
 - **Extension Building**: Standard `torch.utils.cpp_extension` works on MUSA after importing torchada
 - **Source Code Porting**: Automatic CUDA → MUSA symbol mapping for C++/CUDA extensions
-- **Distributed Training**: `torch.distributed` with 'nccl' backend automatically uses 'mccl' on MUSA
+- **Distributed Training**: `torch.distributed` with `nccl` backend automatically uses `mccl` on MUSA
 - **Mixed Precision**: `torch.cuda.amp` autocast and GradScaler work transparently
 - **CUDA Graphs**: `torch.cuda.CUDAGraph` maps to `MUSAGraph` on MUSA
 - **Inductor Support**: `torch._inductor` autotune uses `MUSA_VISIBLE_DEVICES` on MUSA
