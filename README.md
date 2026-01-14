@@ -291,11 +291,12 @@ torchada has been successfully integrated into several popular PyTorch-based pro
 
 ### Integrated Projects
 
-| Project | Category | PR | Status |
-|---------|----------|--------|--------|
+| Project | Category | PR/Issue | Status |
+|---------|----------|----------|--------|
+| [SGLang](https://github.com/sgl-project/sglang) | Model Serving | [#16565](https://github.com/sgl-project/sglang/issues/16565) | Open |
 | [ComfyUI](https://github.com/comfyanonymous/ComfyUI) | Image/Video Generation | [#11618](https://github.com/comfyanonymous/ComfyUI/pull/11618) | Open |
-| [LightLLM](https://github.com/ModelTC/LightLLM) | LLM Inference | [#1162](https://github.com/ModelTC/LightLLM/pull/1162) | ✅ Merged |
 | [Xinference](https://github.com/xorbitsai/inference) | Model Serving | [#4425](https://github.com/xorbitsai/inference/pull/4425) | ✅ Merged |
+| [LightLLM](https://github.com/ModelTC/LightLLM) | Model Serving | [#1162](https://github.com/ModelTC/LightLLM/pull/1162) | ✅ Merged |
 | [LightX2V](https://github.com/ModelTC/LightX2V) | Image/Video Generation | [#678](https://github.com/ModelTC/LightX2V/pull/678) | ✅ Merged |
 
 ### Integration Patterns
