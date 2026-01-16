@@ -327,11 +327,11 @@ Add `torchada` to your project's dependencies:
 ```python
 # pyproject.toml
 dependencies = [
-    "torchada>=0.1.11",
+    "torchada>=0.1.16",
 ]
 
 # Or requirements.txt
-torchada>=0.1.11
+torchada>=0.1.16
 ```
 
 #### Pattern 3: Device Availability Check
@@ -405,7 +405,7 @@ This pattern is used by **LightX2V**.
 
 ### Common Integration Steps
 
-1. **Add dependency**: Add `torchada>=0.1.11` to your project dependencies
+1. **Add dependency**: Add `torchada>=0.1.16` to your project dependencies
 
 2. **Import early**: Import `torchada` before using any `torch.cuda` APIs
    ```python
