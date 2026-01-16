@@ -301,6 +301,83 @@ class TestCUDAGraph:
 
         assert hasattr(torch.cuda, "graph_pool_handle")
 
+    def test_graph_context_manager_cuda_graph_keyword(self):
+        """Test torch.cuda.graph accepts cuda_graph= keyword argument.
+
+        MUSA's graph class uses musa_graph= but CUDA code uses cuda_graph=.
+        The wrapper should translate cuda_graph= to work on MUSA.
+        """
+        import torch
+
+        import torchada
+
+        # Use device_count > 0 since torch.cuda.is_available() returns False on MUSA
+        if torch.cuda.device_count() == 0:
+            pytest.skip("No GPU available")
+
+        g = torch.cuda.CUDAGraph()
+
+        # Should accept cuda_graph= keyword argument
+        ctx = torch.cuda.graph(cuda_graph=g)
+        assert ctx is not None
+        assert hasattr(ctx, "_wrapped")
+
+    def test_graph_context_manager_positional(self):
+        """Test torch.cuda.graph accepts positional argument."""
+        import torch
+
+        import torchada
+
+        if torch.cuda.device_count() == 0:
+            pytest.skip("No GPU available")
+
+        g = torch.cuda.CUDAGraph()
+
+        # Should accept positional argument
+        ctx = torch.cuda.graph(g)
+        assert ctx is not None
+
+    def test_graph_context_manager_musa_graph_keyword(self):
+        """Test torch.cuda.graph also accepts musa_graph= for compatibility."""
+        import torch
+
+        import torchada
+
+        if torch.cuda.device_count() == 0:
+            pytest.skip("No GPU available")
+
+        g = torch.cuda.CUDAGraph()
+
+        # Should also accept musa_graph= for direct MUSA code
+        ctx = torch.cuda.graph(musa_graph=g)
+        assert ctx is not None
+
+    def test_graph_context_manager_missing_arg_raises(self):
+        """Test torch.cuda.graph raises TypeError when graph object is missing."""
+        import torch
+
+        import torchada  # noqa: F401
+
+        with pytest.raises(TypeError, match="missing required argument"):
+            torch.cuda.graph()
+
+    def test_graph_context_manager_with_pool_and_stream(self):
+        """Test torch.cuda.graph accepts pool and stream arguments."""
+        import torch
+
+        import torchada
+
+        if torch.cuda.device_count() == 0:
+            pytest.skip("No GPU available")
+
+        g = torch.cuda.CUDAGraph()
+        pool = torch.cuda.graph_pool_handle()
+        stream = torch.cuda.Stream()
+
+        # Should accept all arguments together
+        ctx = torch.cuda.graph(cuda_graph=g, pool=pool, stream=stream)
+        assert ctx is not None
+
 
 class TestDistributedBackend:
     """Test distributed backend patching."""

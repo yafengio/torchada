@@ -318,6 +318,76 @@ def _patch_torch_generator():
     torch.Generator = GeneratorWrapper
 
 
+# Store original graph class for patching
+_original_graph_class = None
+
+
+@patch_function
+def _patch_graph_context_manager():
+    """
+    Patch torch.cuda.graph context manager to accept cuda_graph= keyword argument.
+
+    MUSA's graph class uses musa_graph= as the first parameter, but CUDA code
+    uses cuda_graph=. This wrapper translates cuda_graph= to musa_graph= so that
+    existing CUDA code works transparently on MUSA.
+    """
+    global _original_graph_class
+
+    if _original_graph_class is not None:
+        return  # Already patched
+
+    # Get the graph class from torch.cuda (which is torch.musa after patching)
+    if not hasattr(torch.cuda, "graph"):
+        return
+
+    _original_graph_class = torch.cuda.graph
+
+    class GraphWrapper:
+        """Wrapper for torch.cuda.graph that accepts cuda_graph= keyword argument."""
+
+        # Preserve class attributes
+        default_capture_stream = None
+
+        def __init__(
+            self,
+            cuda_graph=None,
+            pool=None,
+            stream=None,
+            capture_error_mode: str = "global",
+            *,
+            musa_graph=None,  # Also accept musa_graph for compatibility
+        ):
+            # Allow either cuda_graph= or musa_graph= or positional argument
+            graph_obj = cuda_graph if cuda_graph is not None else musa_graph
+            if graph_obj is None:
+                raise TypeError("graph() missing required argument: 'cuda_graph'")
+
+            # Create the original graph instance
+            self._wrapped = _original_graph_class(
+                graph_obj,
+                pool=pool,
+                stream=stream,
+                capture_error_mode=capture_error_mode,
+            )
+
+        def __enter__(self):
+            return self._wrapped.__enter__()
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return self._wrapped.__exit__(exc_type, exc_value, traceback)
+
+    # Copy over class attributes and docstring
+    GraphWrapper.__doc__ = _original_graph_class.__doc__
+    GraphWrapper.__module__ = _original_graph_class.__module__
+
+    # Replace torch.cuda.graph with our wrapper
+    torch.cuda.graph = GraphWrapper
+
+    # Also update torch.musa.graph if it exists
+    if hasattr(torch, "musa") and hasattr(torch.musa, "graph"):
+        torch.musa.graph = GraphWrapper
+
+
 def _wrap_factory_function(original_fn: Callable) -> Callable:
     """Wrap tensor factory functions (empty, zeros, ones, etc.) to translate device."""
 
@@ -461,6 +531,10 @@ def _patch_torch_cuda_module():
         # Add CUDAGraph alias pointing to MUSAGraph
         if hasattr(torch.musa, "MUSAGraph") and not hasattr(torch.musa, "CUDAGraph"):
             torch.musa.CUDAGraph = torch.musa.MUSAGraph
+
+        # Patch torch.cuda.graph context manager to accept cuda_graph= keyword
+        # MUSA's graph class uses musa_graph= but CUDA code uses cuda_graph=
+        _patch_graph_context_manager()
 
         # Patch torch.cuda.nccl -> torch.musa.mccl
         if hasattr(torch.musa, "mccl"):
