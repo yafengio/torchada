@@ -741,6 +741,55 @@ def _patch_autocast():
 
 @patch_function
 @requires_import("torch_musa")
+def _patch_profiler_activity():
+    """
+    Patch torch.profiler.profile to translate ProfilerActivity.CUDA to PrivateUse1 on MUSA.
+
+    On MUSA, ProfilerActivity.CUDA doesn't work - you need to use ProfilerActivity.PrivateUse1.
+    Simply assigning `ProfilerActivity.CUDA = ProfilerActivity.PrivateUse1` doesn't work because
+    ProfilerActivity is an enum. Instead, we wrap the profile() function to translate
+    CUDA activities to PrivateUse1 in the activities list.
+    """
+    if not hasattr(torch, "profiler") or not hasattr(torch.profiler, "profile"):
+        return
+
+    original_profile = torch.profiler.profile
+
+    def _translate_activities(activities):
+        """Translate ProfilerActivity.CUDA to PrivateUse1 on MUSA."""
+        if activities is None:
+            return None
+
+        translated = []
+        for activity in activities:
+            if activity == torch.profiler.ProfilerActivity.CUDA:
+                # On MUSA, use PrivateUse1 instead of CUDA
+                translated.append(torch.profiler.ProfilerActivity.PrivateUse1)
+            else:
+                translated.append(activity)
+        return translated
+
+    class ProfileWrapper:
+        """Wrapper for torch.profiler.profile that translates CUDA activities."""
+
+        def __init__(self, *args, activities=None, **kwargs):
+            translated_activities = _translate_activities(activities)
+            self._profiler = original_profile(*args, activities=translated_activities, **kwargs)
+
+        def __enter__(self):
+            return self._profiler.__enter__()
+
+        def __exit__(self, *args):
+            return self._profiler.__exit__(*args)
+
+        def __getattr__(self, name):
+            return getattr(self._profiler, name)
+
+    torch.profiler.profile = ProfileWrapper
+
+
+@patch_function
+@requires_import("torch_musa")
 def _patch_torch_c_exports():
     """
     Patch torch._C to include MUSA-specific functions from torch_musa._MUSAC.

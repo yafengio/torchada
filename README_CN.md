@@ -55,6 +55,7 @@ torch.cuda.synchronize()
 | 同步 | `torch.cuda.synchronize()`, `Stream`, `Event` |
 | 混合精度 | `torch.cuda.amp.autocast()`, `GradScaler()` |
 | CUDA Graphs | `torch.cuda.CUDAGraph`, `torch.cuda.graph()` |
+| 性能分析 | `ProfilerActivity.CUDA` → 使用 PrivateUse1 |
 | 分布式训练 | `dist.init_process_group(backend='nccl')` → 使用 MCCL |
 | torch.compile | `torch.compile(model)` 支持所有后端 |
 | C++ 扩展 | `CUDAExtension`, `BuildExtension`, `load()` |

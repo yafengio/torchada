@@ -55,6 +55,7 @@ That's it! All `torch.cuda.*` APIs are automatically redirected to `torch.musa.*
 | Synchronization | `torch.cuda.synchronize()`, `Stream`, `Event` |
 | Mixed precision | `torch.cuda.amp.autocast()`, `GradScaler()` |
 | CUDA Graphs | `torch.cuda.CUDAGraph`, `torch.cuda.graph()` |
+| Profiler | `ProfilerActivity.CUDA` → uses PrivateUse1 |
 | Distributed | `dist.init_process_group(backend='nccl')` → uses MCCL |
 | torch.compile | `torch.compile(model)` with all backends |
 | C++ Extensions | `CUDAExtension`, `BuildExtension`, `load()` |
