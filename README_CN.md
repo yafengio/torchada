@@ -1,0 +1,238 @@
+<div align="center" id="sglangtop">
+<img src="https://raw.githubusercontent.com/MooreThreads/torchada/main/assets/logo.png" alt="logo" width="250" margin="10px"></img>
+</div>
+
+--------------------------------------------------------------------------------
+
+# torchada
+
+[English](README.md) | 中文
+
+**在摩尔线程 GPU 上运行你的 CUDA 代码 — 无需任何代码改动**
+
+torchada 是一个适配器，让 [torch_musa](https://github.com/MooreThreads/torch_musa)（摩尔线程 GPU 的 PyTorch 支持）兼容标准的 PyTorch CUDA API。只需导入一次，你现有的 `torch.cuda.*` 代码就能在 MUSA 硬件上运行。
+
+## 为什么需要 torchada？
+
+许多 PyTorch 项目使用 `torch.cuda.*` API 为 NVIDIA GPU 编写。要在摩尔线程 GPU 上运行这些项目，通常需要把每个 `cuda` 引用改成 `musa`。torchada 通过在运行时自动将 CUDA API 调用转换为 MUSA 等效调用来消除这一问题。
+
+## 前置条件
+
+- **torch_musa**：必须安装 [torch_musa](https://github.com/MooreThreads/torch_musa)（提供 PyTorch 的 MUSA 支持）
+- **摩尔线程 GPU**：已安装正确驱动的摩尔线程 GPU
+
+## 安装
+
+```bash
+pip install torchada
+
+# 或从源码安装
+git clone https://github.com/MooreThreads/torchada.git
+cd torchada
+pip install -e .
+```
+
+## 快速开始
+
+```python
+import torchada  # ← 在文件顶部添加这一行
+import torch
+
+# 你现有的 CUDA 代码无需改动：
+x = torch.randn(10, 10).cuda()
+print(torch.cuda.device_count())
+torch.cuda.synchronize()
+```
+
+就这么简单！所有 `torch.cuda.*` API 会自动重定向到 `torch.musa.*`。
+
+## 支持的功能
+
+| 功能 | 示例 |
+|------|------|
+| 设备操作 | `tensor.cuda()`, `model.cuda()`, `torch.device("cuda")` |
+| 显存管理 | `torch.cuda.memory_allocated()`, `empty_cache()` |
+| 同步 | `torch.cuda.synchronize()`, `Stream`, `Event` |
+| 混合精度 | `torch.cuda.amp.autocast()`, `GradScaler()` |
+| CUDA Graphs | `torch.cuda.CUDAGraph`, `torch.cuda.graph()` |
+| 分布式训练 | `dist.init_process_group(backend='nccl')` → 使用 MCCL |
+| torch.compile | `torch.compile(model)` 支持所有后端 |
+| C++ 扩展 | `CUDAExtension`, `BuildExtension`, `load()` |
+
+## 示例
+
+### 混合精度训练
+
+```python
+import torchada
+import torch
+
+model = MyModel().cuda()
+scaler = torch.cuda.amp.GradScaler()
+
+with torch.cuda.amp.autocast():
+    output = model(data.cuda())
+    loss = criterion(output, target.cuda())
+
+scaler.scale(loss).backward()
+scaler.step(optimizer)
+scaler.update()
+```
+
+### 分布式训练
+
+```python
+import torchada
+import torch.distributed as dist
+
+# 'nccl' 会自动映射到 MUSA 上的 'mccl'
+dist.init_process_group(backend='nccl')
+```
+
+### CUDA Graphs
+
+```python
+import torchada
+import torch
+
+g = torch.cuda.CUDAGraph()
+with torch.cuda.graph(cuda_graph=g):  # cuda_graph= 关键字参数在 MUSA 上也能工作
+    y = model(x)
+```
+
+### torch.compile
+
+```python
+import torchada
+import torch
+
+compiled_model = torch.compile(model.cuda(), backend='inductor')
+```
+
+### 构建 C++ 扩展
+
+```python
+import torchada  # 必须在 torch.utils.cpp_extension 之前导入
+from torch.utils.cpp_extension import CUDAExtension, BuildExtension
+
+# 标准 CUDAExtension 可直接使用 — torchada 处理 CUDA→MUSA 转换
+ext = CUDAExtension("my_ext", sources=["kernel.cu"])
+```
+
+## 平台检测
+
+```python
+import torchada
+from torchada import detect_platform, Platform
+
+platform = detect_platform()
+if platform == Platform.MUSA:
+    print("在摩尔线程 GPU 上运行")
+elif platform == Platform.CUDA:
+    print("在 NVIDIA GPU 上运行")
+
+# 或使用基于 torch.version 的检测
+def is_musa():
+    import torch
+    return hasattr(torch.version, 'musa') and torch.version.musa is not None
+```
+
+## 已知限制
+
+**设备类型字符串比较在 MUSA 上会失败：**
+
+```python
+device = torch.device("cuda:0")  # 在 MUSA 上会变成 musa:0
+device.type == "cuda"  # 返回 False！
+```
+
+**解决方案：** 使用 `torchada.is_gpu_device()`：
+
+```python
+import torchada
+
+if torchada.is_gpu_device(device):  # 在 CUDA 和 MUSA 上都能工作
+    ...
+# 或者: device.type in ("cuda", "musa")
+```
+
+## API 参考
+
+| 函数 | 描述 |
+|------|------|
+| `detect_platform()` | 返回 `Platform.CUDA`、`Platform.MUSA` 或 `Platform.CPU` |
+| `is_musa_platform()` | 在 MUSA 上运行时返回 True |
+| `is_cuda_platform()` | 在 CUDA 上运行时返回 True |
+| `is_gpu_device(device)` | 设备是 CUDA 或 MUSA 时返回 True |
+| `CUDA_HOME` | CUDA/MUSA 安装路径 |
+
+**注意**：`torch.cuda.is_available()` 故意没有重定向 — 在 MUSA 上返回 `False`。这是为了支持正确的平台检测。请改用 `torch.musa.is_available()` 或 `is_musa()` 函数。
+
+## C++ 扩展符号映射
+
+构建 C++ 扩展时，torchada 会自动将 CUDA 符号转换为 MUSA：
+
+| CUDA | MUSA |
+|------|------|
+| `cudaMalloc` | `musaMalloc` |
+| `cudaStream_t` | `musaStream_t` |
+| `cublasHandle_t` | `mublasHandle_t` |
+| `at::cuda` | `at::musa` |
+| `c10::cuda` | `c10::musa` |
+| `#include <cuda/*>` | `#include <musa/*>` |
+
+完整映射表（380+ 条映射）请参见 `src/torchada/_mapping.py`。
+
+## 将 torchada 集成到你的项目
+
+### 步骤 1：添加依赖
+
+```
+# pyproject.toml 或 requirements.txt
+torchada>=0.1.16
+```
+
+### 步骤 2：条件导入
+
+```python
+# 在应用入口处
+def is_musa():
+    import torch
+    return hasattr(torch.version, "musa") and torch.version.musa is not None
+
+if is_musa():
+    import torchada  # noqa: F401
+
+# 其余代码正常使用 torch.cuda.*
+```
+
+### 步骤 3：扩展功能标志（如适用）
+
+```python
+# 在 GPU 能力检查中包含 MUSA
+if is_nvidia() or is_musa():
+    ENABLE_FLASH_ATTENTION = True
+```
+
+### 步骤 4：修复设备类型检查（如适用）
+
+```python
+# 不要用: device.type == "cuda"
+# 改用: device.type in ("cuda", "musa")
+# 或者: torchada.is_gpu_device(device)
+```
+
+## 使用 torchada 的项目
+
+| 项目 | 类别 | 状态 |
+|------|------|------|
+| [Xinference](https://github.com/xorbitsai/inference) | 模型服务 | ✅ 已合并 |
+| [LightLLM](https://github.com/ModelTC/LightLLM) | 模型服务 | ✅ 已合并 |
+| [LightX2V](https://github.com/ModelTC/LightX2V) | 图像/视频生成 | ✅ 已合并 |
+| [SGLang](https://github.com/sgl-project/sglang) | 模型服务 | 进行中 |
+| [ComfyUI](https://github.com/comfyanonymous/ComfyUI) | 图像/视频生成 | 进行中 |
+
+## 许可证
+
+MIT License
+
