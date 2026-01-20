@@ -1122,3 +1122,69 @@ class TestIsCompiledAndBackends:
 
             assert use_count is not None
             assert callable(use_count)
+
+
+class TestProfilerActivity:
+    """Test torch.profiler.ProfilerActivity.CUDA patching."""
+
+    def test_profiler_activity_cuda_accessible(self):
+        """Test ProfilerActivity.CUDA is still accessible after patching."""
+        import torch
+
+        import torchada  # noqa: F401
+
+        assert hasattr(torch.profiler, "ProfilerActivity")
+        assert hasattr(torch.profiler.ProfilerActivity, "CUDA")
+        assert hasattr(torch.profiler.ProfilerActivity, "PrivateUse1")
+
+    def test_profiler_with_cuda_activity(self):
+        """Test profiler can be created with CUDA activity on MUSA."""
+        import torch
+
+        import torchada
+
+        activities = [
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ]
+
+        # Should be able to create profiler with CUDA activity
+        profiler = torch.profiler.profile(activities=activities)
+        assert profiler is not None
+
+        if torchada.is_musa_platform():
+            # On MUSA, check that the wrapper is used
+            assert hasattr(profiler, "_profiler")
+
+    def test_profiler_context_manager(self):
+        """Test profiler context manager works with CUDA activity."""
+        import torch
+
+        import torchada  # noqa: F401
+
+        activities = [
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ]
+
+        x = torch.randn(10, 10)
+        # Context manager should work
+        with torch.profiler.profile(activities=activities) as prof:
+            y = x.sum()
+
+        assert prof is not None
+        assert y is not None
+
+    def test_profiler_methods_accessible(self):
+        """Test profiler methods are accessible through wrapper."""
+        import torch
+
+        import torchada  # noqa: F401
+
+        activities = [torch.profiler.ProfilerActivity.CPU]
+        profiler = torch.profiler.profile(activities=activities)
+
+        # Common methods should be accessible
+        assert hasattr(profiler, "start")
+        assert hasattr(profiler, "stop")
+        assert hasattr(profiler, "step")
