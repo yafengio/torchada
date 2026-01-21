@@ -23,6 +23,7 @@ Usage:
 
 import functools
 import sys
+import warnings
 from types import ModuleType
 from typing import Any, Callable, List, Optional
 
@@ -786,6 +787,35 @@ def _patch_profiler_activity():
             return getattr(self._profiler, name)
 
     torch.profiler.profile = ProfileWrapper
+
+
+@patch_function
+@requires_import("torch_musa")
+def _patch_musa_warnings():
+    """
+    Suppress noisy MUSA-specific warnings from torch_musa.
+
+    These warnings are informational but can clutter logs:
+    - "In musa autocast, but the target dtype is not supported. Disabling autocast."
+    - "Unsupported qk_head_dim: X v_head_dim: Y for FlashAttention in MUSA backend"
+
+    We suppress them using Python's warnings.filterwarnings().
+    """
+    # Suppress autocast dtype warning from torch/amp/autocast_mode.py
+    # This happens when autocast is used with unsupported dtypes on MUSA
+    warnings.filterwarnings(
+        "ignore",
+        message=r"In musa autocast, but the target dtype is not supported.*",
+        category=UserWarning,
+    )
+
+    # Suppress FlashAttention unsupported dimension warning from torch_musa
+    # This happens when SDP attention is used with unsupported head dimensions
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Unsupported qk_head_dim:.*for FlashAttention in MUSA backend.*",
+        category=UserWarning,
+    )
 
 
 @patch_function
