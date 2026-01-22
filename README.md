@@ -56,6 +56,7 @@ That's it! All `torch.cuda.*` APIs are automatically redirected to `torch.musa.*
 | Mixed precision | `torch.cuda.amp.autocast()`, `GradScaler()` |
 | CUDA Graphs | `torch.cuda.CUDAGraph`, `torch.cuda.graph()` |
 | Profiler | `ProfilerActivity.CUDA` → uses PrivateUse1 |
+| Custom Ops | `Library.impl(..., "CUDA")` → uses PrivateUse1 |
 | Distributed | `dist.init_process_group(backend='nccl')` → uses MCCL |
 | torch.compile | `torch.compile(model)` with all backends |
 | C++ Extensions | `CUDAExtension`, `BuildExtension`, `load()` |
@@ -118,6 +119,30 @@ from torch.utils.cpp_extension import CUDAExtension, BuildExtension
 
 # Standard CUDAExtension works — torchada handles CUDA→MUSA translation
 ext = CUDAExtension("my_ext", sources=["kernel.cu"])
+```
+
+### Custom Ops
+
+```python
+import torchada
+import torch
+
+my_lib = torch.library.Library("my_lib", "DEF")
+my_lib.define("my_op(Tensor x) -> Tensor")
+my_lib.impl("my_op", my_func, "CUDA")  # Works on MUSA!
+```
+
+### Profiler
+
+```python
+import torchada
+import torch
+
+# ProfilerActivity.CUDA works on MUSA
+with torch.profiler.profile(
+    activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA]
+) as prof:
+    model(x)
 ```
 
 ## Platform Detection

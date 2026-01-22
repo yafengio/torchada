@@ -56,6 +56,7 @@ torch.cuda.synchronize()
 | 混合精度 | `torch.cuda.amp.autocast()`, `GradScaler()` |
 | CUDA Graphs | `torch.cuda.CUDAGraph`, `torch.cuda.graph()` |
 | 性能分析 | `ProfilerActivity.CUDA` → 使用 PrivateUse1 |
+| 自定义算子 | `Library.impl(..., "CUDA")` → 使用 PrivateUse1 |
 | 分布式训练 | `dist.init_process_group(backend='nccl')` → 使用 MCCL |
 | torch.compile | `torch.compile(model)` 支持所有后端 |
 | C++ 扩展 | `CUDAExtension`, `BuildExtension`, `load()` |
@@ -118,6 +119,30 @@ from torch.utils.cpp_extension import CUDAExtension, BuildExtension
 
 # 标准 CUDAExtension 可直接使用 — torchada 处理 CUDA→MUSA 转换
 ext = CUDAExtension("my_ext", sources=["kernel.cu"])
+```
+
+### 自定义算子
+
+```python
+import torchada
+import torch
+
+my_lib = torch.library.Library("my_lib", "DEF")
+my_lib.define("my_op(Tensor x) -> Tensor")
+my_lib.impl("my_op", my_func, "CUDA")  # 在 MUSA 上也能工作！
+```
+
+### 性能分析
+
+```python
+import torchada
+import torch
+
+# ProfilerActivity.CUDA 在 MUSA 上也能工作
+with torch.profiler.profile(
+    activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA]
+) as prof:
+    model(x)
 ```
 
 ## 平台检测
