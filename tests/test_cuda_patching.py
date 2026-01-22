@@ -1231,3 +1231,39 @@ class TestMusaWarnings:
             # Check that no warnings were collected (filter worked)
             musa_warnings = [x for x in w if "musa autocast" in str(x.message)]
             assert len(musa_warnings) == 0, "Autocast warning was not suppressed"
+
+
+class TestLibraryImpl:
+    """Test torch.library.Library.impl() patching for CUDA -> PrivateUse1 translation."""
+
+    def test_library_impl_cuda_translated(self):
+        """Test that Library.impl with 'CUDA' works on MUSA tensors."""
+        import uuid
+
+        import torch
+        import torch.library
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        # Create a test library with unique name to avoid conflicts
+        lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
+        test_lib = torch.library.Library(lib_name, "DEF")
+
+        def identity(x: torch.Tensor) -> torch.Tensor:
+            return x
+
+        # Register with CUDA backend - should be translated to PrivateUse1
+        test_lib.define("identity_op(Tensor x) -> Tensor")
+        test_lib.impl("identity_op", identity, "CUDA")
+
+        # Test calling it with MUSA tensor - if dispatch fails, we get NotImplementedError
+        x = torch.randn(3).musa()
+        op = getattr(torch.ops, lib_name)
+        result = op.identity_op(x)
+
+        # Just verify we got a result on MUSA device (dispatch worked)
+        assert result.device.type == "musa"
+        assert result is x  # identity function returns same object

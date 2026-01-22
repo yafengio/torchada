@@ -820,6 +820,33 @@ def _patch_musa_warnings():
 
 @patch_function
 @requires_import("torch_musa")
+def _patch_library_impl():
+    """
+    Patch torch.library.Library.impl() to translate 'CUDA' dispatch key to 'PrivateUse1'.
+
+    On MUSA, tensors dispatch to PrivateUse1, not CUDA. When code registers custom ops
+    with the CUDA backend, they won't work with MUSA tensors. This patch automatically
+    translates 'CUDA' to 'PrivateUse1' when registering custom op implementations.
+
+    Example of code that needs this patch:
+        my_lib.impl(op_name, op_func, "CUDA")  # Now works on MUSA!
+    """
+    if not hasattr(torch, "library") or not hasattr(torch.library, "Library"):
+        return
+
+    original_impl = torch.library.Library.impl
+
+    def patched_impl(self, name, fn, dispatch_key=""):
+        # Translate CUDA to PrivateUse1 for MUSA compatibility
+        if dispatch_key == "CUDA":
+            dispatch_key = "PrivateUse1"
+        return original_impl(self, name, fn, dispatch_key)
+
+    torch.library.Library.impl = patched_impl
+
+
+@patch_function
+@requires_import("torch_musa")
 def _patch_torch_c_exports():
     """
     Patch torch._C to include MUSA-specific functions from torch_musa._MUSAC.
