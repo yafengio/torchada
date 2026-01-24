@@ -225,8 +225,8 @@ class DeviceFactoryWrapper(metaclass=_DeviceFactoryMeta):
         # Handle the case where device is already a torch.device
         if isinstance(device, original):
             if device.type == "cuda":
-                device = "musa"
                 index = device.index if index is None else index
+                device = "musa"
             else:
                 return device
 
@@ -775,7 +775,9 @@ def _patch_profiler_activity():
 
         def __init__(self, *args, activities=None, **kwargs):
             translated_activities = _translate_activities(activities)
-            self._profiler = original_profile(*args, activities=translated_activities, **kwargs)
+            self._profiler = original_profile(
+                *args, activities=translated_activities, **kwargs
+            )
 
         def __enter__(self):
             return self._profiler.__enter__()

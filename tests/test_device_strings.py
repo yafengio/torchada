@@ -379,6 +379,22 @@ class TestDeviceIndexVariants:
             assert device.type == "cuda"
             assert device.index == 0
 
+    def test_torch_device_from_original_cuda_device(self):
+        """Test torch.device(torch.device('cuda:1')) translation on MUSA."""
+        import torch
+
+        import torchada
+        from torchada._patch import _original_torch_device
+
+        if not torchada.is_musa_platform() or _original_torch_device is None:
+            pytest.skip("MUSA platform required with patched torch.device")
+
+        cuda_device = _original_torch_device("cuda:1")
+        wrapped = torch.device(cuda_device)
+
+        assert wrapped.type == "musa"
+        assert wrapped.index == 1
+
 
 class TestDeviceContextManager:
     """Test device context manager (with torch.device(...):) works."""
