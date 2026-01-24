@@ -225,8 +225,8 @@ class DeviceFactoryWrapper(metaclass=_DeviceFactoryMeta):
         # Handle the case where device is already a torch.device
         if isinstance(device, original):
             if device.type == "cuda":
-                device = "musa"
                 index = device.index if index is None else index
+                device = "musa"
             else:
                 return device
 
