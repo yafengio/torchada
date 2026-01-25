@@ -1267,3 +1267,54 @@ class TestLibraryImpl:
         # Just verify we got a result on MUSA device (dispatch worked)
         assert result.device.type == "musa"
         assert result is x  # identity function returns same object
+
+
+class TestCudart:
+    """Test torch.cuda.cudart() CUDA runtime wrapper."""
+
+    def test_cudart_returns_wrapper(self):
+        """Test that torch.cuda.cudart() returns a wrapper on MUSA."""
+        import torch
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        cudart = torch.cuda.cudart()
+        assert cudart is not None
+        # Should be our wrapper class
+        assert "CudartWrapper" in type(cudart).__name__
+
+    def test_cudart_host_register(self):
+        """Test cudaHostRegister works via the wrapper."""
+        import torch
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        cudart = torch.cuda.cudart()
+        x = torch.randn(10)
+        ptr = x.data_ptr()
+        size = x.numel() * x.element_size()
+
+        # Register should succeed (return 0 or equivalent)
+        result = cudart.cudaHostRegister(ptr, size, 1)
+        assert result == 0, f"cudaHostRegister failed with {result}"
+
+        # Unregister
+        result2 = cudart.cudaHostUnregister(ptr)
+        assert result2 == 0, f"cudaHostUnregister failed with {result2}"
+
+    def test_cudart_in_dir(self):
+        """Test that cudart appears in dir(torch.cuda)."""
+        import torch
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        assert "cudart" in dir(torch.cuda)

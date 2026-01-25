@@ -55,6 +55,7 @@ torch.cuda.synchronize()
 | 同步 | `torch.cuda.synchronize()`, `Stream`, `Event` |
 | 混合精度 | `torch.cuda.amp.autocast()`, `GradScaler()` |
 | CUDA Graphs | `torch.cuda.CUDAGraph`, `torch.cuda.graph()` |
+| CUDA 运行时 | `torch.cuda.cudart()` → 使用 MUSA 运行时 |
 | 性能分析 | `ProfilerActivity.CUDA` → 使用 PrivateUse1 |
 | 自定义算子 | `Library.impl(..., "CUDA")` → 使用 PrivateUse1 |
 | 分布式训练 | `dist.init_process_group(backend='nccl')` → 使用 MCCL |
@@ -215,7 +216,7 @@ if torchada.is_gpu_device(device):  # 在 CUDA 和 MUSA 上都能工作
 
 ```
 # pyproject.toml 或 requirements.txt
-torchada>=0.1.20
+torchada>=0.1.21
 ```
 
 ### 步骤 2：条件导入

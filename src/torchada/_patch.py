@@ -430,6 +430,40 @@ _FACTORY_FUNCTIONS = [
 ]
 
 
+class _CudartWrapper:
+    """
+    Wrapper for CUDA runtime that translates calls to MUSA runtime.
+
+    This allows code like `torch.cuda.cudart().cudaHostRegister(...)` to work
+    on MUSA by translating to `torch_musa.musart().musaHostRegister(...)`.
+    """
+
+    # Mapping from CUDA runtime function names to MUSA equivalents
+    _CUDA_TO_MUSA = {
+        "cudaHostRegister": "musaHostRegister",
+        "cudaHostUnregister": "musaHostUnregister",
+        "cudaMemGetInfo": "musaMemGetInfo",
+        "cudaGetErrorString": "musaGetErrorString",
+        "cudaStreamCreate": "musaStreamCreate",
+        "cudaStreamDestroy": "musaStreamDestroy",
+    }
+
+    def __init__(self, musart_module):
+        self._musart = musart_module
+
+    def __getattr__(self, name):
+        # Translate CUDA runtime function names to MUSA equivalents
+        if name in self._CUDA_TO_MUSA:
+            musa_name = self._CUDA_TO_MUSA[name]
+            return getattr(self._musart, musa_name)
+
+        # Try direct access (for any functions with same name)
+        if hasattr(self._musart, name):
+            return getattr(self._musart, name)
+
+        raise AttributeError(f"CUDA runtime has no attribute '{name}'")
+
+
 class _CudaModuleWrapper(ModuleType):
     """
     A wrapper module that redirects torch.cuda to torch.musa,
@@ -459,6 +493,23 @@ class _CudaModuleWrapper(ModuleType):
         super().__init__("torch.cuda")
         self._original_cuda = original_cuda
         self._musa_module = musa_module
+        self._cudart_wrapper = None
+
+    def cudart(self):
+        """
+        Return a CUDA runtime wrapper that translates to MUSA runtime.
+
+        This allows code like `torch.cuda.cudart().cudaHostRegister(...)` to work
+        on MUSA by translating to the equivalent MUSA runtime calls.
+        """
+        if self._cudart_wrapper is None:
+            if hasattr(self._musa_module, "musart"):
+                musart_module = self._musa_module.musart()
+                self._cudart_wrapper = _CudartWrapper(musart_module)
+            else:
+                # Fallback to original if musart not available
+                return self._original_cuda.cudart()
+        return self._cudart_wrapper
 
     def __getattr__(self, name):
         # Keep original is_available behavior
@@ -483,6 +534,7 @@ class _CudaModuleWrapper(ModuleType):
         # Combine attributes from both modules
         attrs = set(dir(self._musa_module))
         attrs.update(self._NO_REDIRECT)
+        attrs.add("cudart")
         return list(attrs)
 
 

@@ -55,6 +55,7 @@ That's it! All `torch.cuda.*` APIs are automatically redirected to `torch.musa.*
 | Synchronization | `torch.cuda.synchronize()`, `Stream`, `Event` |
 | Mixed precision | `torch.cuda.amp.autocast()`, `GradScaler()` |
 | CUDA Graphs | `torch.cuda.CUDAGraph`, `torch.cuda.graph()` |
+| CUDA Runtime | `torch.cuda.cudart()` → uses MUSA runtime |
 | Profiler | `ProfilerActivity.CUDA` → uses PrivateUse1 |
 | Custom Ops | `Library.impl(..., "CUDA")` → uses PrivateUse1 |
 | Distributed | `dist.init_process_group(backend='nccl')` → uses MCCL |
@@ -215,7 +216,7 @@ See `src/torchada/_mapping.py` for the complete mapping table (380+ mappings).
 
 ```
 # pyproject.toml or requirements.txt
-torchada>=0.1.20
+torchada>=0.1.21
 ```
 
 ### Step 2: Conditional Import
