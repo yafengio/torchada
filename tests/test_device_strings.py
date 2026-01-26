@@ -395,6 +395,24 @@ class TestDeviceIndexVariants:
         assert wrapped.type == "musa"
         assert wrapped.index == 1
 
+    def test_torch_device_type_keyword(self):
+        """Test torch.device with type= keyword argument."""
+        import torch
+
+        import torchada
+
+        # type= keyword with cpu
+        device1 = torch.device(type="cpu")
+        assert device1.type == "cpu"
+
+        # type= keyword with cuda (should translate to musa on MUSA platform)
+        device2 = torch.device(type="cuda", index=0)
+        if torchada.is_musa_platform():
+            assert device2.type == "musa"
+        else:
+            assert device2.type == "cuda"
+        assert device2.index == 0
+
 
 class TestDeviceContextManager:
     """Test device context manager (with torch.device(...):) works."""

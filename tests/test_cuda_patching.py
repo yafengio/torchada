@@ -1268,6 +1268,232 @@ class TestLibraryImpl:
         assert result.device.type == "musa"
         assert result is x  # identity function returns same object
 
+    def test_library_impl_with_keyset(self):
+        """Test that Library.impl with with_keyset=True works."""
+        import uuid
+
+        import torch
+        import torch.library
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        # Create a test library with unique name to avoid conflicts
+        lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
+        test_lib = torch.library.Library(lib_name, "DEF")
+
+        def identity_with_keyset(keyset, x: torch.Tensor) -> torch.Tensor:
+            # keyset is the dispatch keyset passed when with_keyset=True
+            return x
+
+        # Register with with_keyset=True - this was failing before the fix
+        test_lib.define("identity_keyset(Tensor x) -> Tensor")
+        test_lib.impl("identity_keyset", identity_with_keyset, "CPU", with_keyset=True)
+
+        # Test calling it
+        x = torch.randn(3)
+        op = getattr(torch.ops, lib_name)
+        result = op.identity_keyset(x)
+        assert result is x
+
+    def test_library_impl_with_keyset_false_explicit(self):
+        """Test that Library.impl with with_keyset=False explicitly works."""
+        import uuid
+
+        import torch
+        import torch.library
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
+        test_lib = torch.library.Library(lib_name, "DEF")
+
+        def identity(x: torch.Tensor) -> torch.Tensor:
+            return x
+
+        test_lib.define("identity_op(Tensor x) -> Tensor")
+        test_lib.impl("identity_op", identity, "CPU", with_keyset=False)
+
+        x = torch.randn(3)
+        op = getattr(torch.ops, lib_name)
+        result = op.identity_op(x)
+        assert result is x
+
+    def test_library_impl_op_name_as_keyword(self):
+        """Test that Library.impl works with op_name as keyword argument."""
+        import uuid
+
+        import torch
+        import torch.library
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
+        test_lib = torch.library.Library(lib_name, "DEF")
+
+        def identity(x: torch.Tensor) -> torch.Tensor:
+            return x
+
+        test_lib.define("identity_op(Tensor x) -> Tensor")
+        # Use op_name as keyword argument
+        test_lib.impl(op_name="identity_op", fn=identity, dispatch_key="CPU")
+
+        x = torch.randn(3)
+        op = getattr(torch.ops, lib_name)
+        result = op.identity_op(x)
+        assert result is x
+
+    def test_library_impl_fn_as_keyword(self):
+        """Test that Library.impl works with fn as keyword argument."""
+        import uuid
+
+        import torch
+        import torch.library
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
+        test_lib = torch.library.Library(lib_name, "DEF")
+
+        def identity(x: torch.Tensor) -> torch.Tensor:
+            return x
+
+        test_lib.define("identity_op(Tensor x) -> Tensor")
+        # Use fn as keyword argument
+        test_lib.impl("identity_op", fn=identity, dispatch_key="CPU")
+
+        x = torch.randn(3)
+        op = getattr(torch.ops, lib_name)
+        result = op.identity_op(x)
+        assert result is x
+
+    def test_library_impl_dispatch_key_as_keyword(self):
+        """Test that Library.impl works with dispatch_key as keyword argument."""
+        import uuid
+
+        import torch
+        import torch.library
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
+        test_lib = torch.library.Library(lib_name, "DEF")
+
+        def identity(x: torch.Tensor) -> torch.Tensor:
+            return x
+
+        test_lib.define("identity_op(Tensor x) -> Tensor")
+        # Use dispatch_key as keyword argument
+        test_lib.impl("identity_op", identity, dispatch_key="CPU")
+
+        x = torch.randn(3)
+        op = getattr(torch.ops, lib_name)
+        result = op.identity_op(x)
+        assert result is x
+
+    def test_library_impl_cuda_with_keyset(self):
+        """Test CUDA dispatch key translation works with with_keyset=True."""
+        import uuid
+
+        import torch
+        import torch.library
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
+        test_lib = torch.library.Library(lib_name, "DEF")
+
+        def identity_with_keyset(keyset, x: torch.Tensor) -> torch.Tensor:
+            return x
+
+        test_lib.define("identity_op(Tensor x) -> Tensor")
+        # Use CUDA with with_keyset=True
+        test_lib.impl("identity_op", identity_with_keyset, dispatch_key="CUDA", with_keyset=True)
+
+        x = torch.randn(3).musa()
+        op = getattr(torch.ops, lib_name)
+        result = op.identity_op(x)
+        assert result.device.type == "musa"
+
+    def test_library_impl_autograd_cuda_translation(self):
+        """Test AutogradCUDA dispatch key translates to AutogradPrivateUse1."""
+        import uuid
+
+        import torch
+        import torch.library
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
+        test_lib = torch.library.Library(lib_name, "DEF")
+
+        def identity(x: torch.Tensor) -> torch.Tensor:
+            return x
+
+        def identity_keyset(keyset, x: torch.Tensor) -> torch.Tensor:
+            return x
+
+        test_lib.define("identity_op(Tensor x) -> Tensor")
+        test_lib.impl("identity_op", identity, "CPU")
+        # AutogradCUDA should translate to AutogradPrivateUse1
+        test_lib.impl("identity_op", identity_keyset, "AutogradCUDA", with_keyset=True)
+
+        # Just verify it registers without error
+        x = torch.randn(3)
+        op = getattr(torch.ops, lib_name)
+        result = op.identity_op(x)
+        assert result is x
+
+    def test_library_impl_opoverload_as_op_name(self):
+        """Test Library.impl works with OpOverload as op_name."""
+        import uuid
+
+        import torch
+        import torch.library
+
+        import torchada
+
+        if not torchada.is_musa_platform():
+            pytest.skip("Only applicable on MUSA platform")
+
+        lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
+        test_lib = torch.library.Library(lib_name, "DEF")
+
+        def identity(x: torch.Tensor) -> torch.Tensor:
+            return x
+
+        test_lib.define("identity_op(Tensor x) -> Tensor")
+        test_lib.impl("identity_op", identity, "CPU")
+
+        # Get the OpOverload and register another impl with it
+        op_overload = getattr(torch.ops, lib_name).identity_op.default
+        test_lib.impl(op_overload, identity, "CUDA")
+
+        x = torch.randn(3).musa()
+        op = getattr(torch.ops, lib_name)
+        result = op.identity_op(x)
+        assert result.device.type == "musa"
+
 
 class TestCudart:
     """Test torch.cuda.cudart() CUDA runtime wrapper."""
