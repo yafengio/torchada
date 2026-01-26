@@ -213,14 +213,24 @@ class DeviceFactoryWrapper(metaclass=_DeviceFactoryMeta):
     A wrapper class that acts as torch.device but translates cuda to musa.
 
     Uses a metaclass to properly handle isinstance() checks.
+
+    Supports all calling conventions of torch.device:
+        torch.device("cuda:0")
+        torch.device("cuda", 0)
+        torch.device(type="cuda", index=0)
+        torch.device(device="cuda:0")
     """
 
     _original = None
 
-    def __new__(cls, device=None, index=None):
+    def __new__(cls, device=None, index=None, *, type=None):
         original = cls._original
         if original is None:
             raise RuntimeError("DeviceFactoryWrapper not initialized")
+
+        # Handle 'type' keyword argument (alias for device in original torch.device)
+        if type is not None:
+            device = type
 
         # Handle the case where device is already a torch.device
         if isinstance(device, original):
@@ -874,25 +884,47 @@ def _patch_musa_warnings():
 @requires_import("torch_musa")
 def _patch_library_impl():
     """
-    Patch torch.library.Library.impl() to translate 'CUDA' dispatch key to 'PrivateUse1'.
+    Patch torch.library.Library.impl() to translate CUDA dispatch keys to PrivateUse1.
 
     On MUSA, tensors dispatch to PrivateUse1, not CUDA. When code registers custom ops
-    with the CUDA backend, they won't work with MUSA tensors. This patch automatically
-    translates 'CUDA' to 'PrivateUse1' when registering custom op implementations.
+    with CUDA backends, they won't work with MUSA tensors. This patch automatically
+    translates CUDA dispatch keys to PrivateUse1 equivalents:
+
+        CUDA -> PrivateUse1
+        AutogradCUDA -> AutogradPrivateUse1
+        AutocastCUDA -> AutocastPrivateUse1
+        SparseCUDA -> SparsePrivateUse1
+        SparseCsrCUDA -> SparseCsrPrivateUse1
+        QuantizedCUDA -> QuantizedPrivateUse1
+        NestedTensorCUDA -> NestedTensorPrivateUse1
+
+    This patch preserves the full original signature including the with_keyset parameter.
 
     Example of code that needs this patch:
         my_lib.impl(op_name, op_func, "CUDA")  # Now works on MUSA!
+        my_lib.impl(op_name, op_func, "Autograd", with_keyset=True)  # Also works!
     """
     if not hasattr(torch, "library") or not hasattr(torch.library, "Library"):
         return
 
     original_impl = torch.library.Library.impl
 
-    def patched_impl(self, name, fn, dispatch_key=""):
-        # Translate CUDA to PrivateUse1 for MUSA compatibility
-        if dispatch_key == "CUDA":
-            dispatch_key = "PrivateUse1"
-        return original_impl(self, name, fn, dispatch_key)
+    # Mapping of CUDA dispatch keys to PrivateUse1 equivalents
+    cuda_dispatch_key_map = {
+        "CUDA": "PrivateUse1",
+        "AutogradCUDA": "AutogradPrivateUse1",
+        "AutocastCUDA": "AutocastPrivateUse1",
+        "SparseCUDA": "SparsePrivateUse1",
+        "SparseCsrCUDA": "SparseCsrPrivateUse1",
+        "QuantizedCUDA": "QuantizedPrivateUse1",
+        "NestedTensorCUDA": "NestedTensorPrivateUse1",
+    }
+
+    def patched_impl(self, op_name, fn, dispatch_key="", *, with_keyset=False):
+        # Translate CUDA dispatch keys to PrivateUse1 equivalents for MUSA compatibility
+        if dispatch_key in cuda_dispatch_key_map:
+            dispatch_key = cuda_dispatch_key_map[dispatch_key]
+        return original_impl(self, op_name, fn, dispatch_key, with_keyset=with_keyset)
 
     torch.library.Library.impl = patched_impl
 
