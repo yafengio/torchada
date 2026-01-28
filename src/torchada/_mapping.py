@@ -475,15 +475,6 @@ _MAPPING_RULE = {
     "CUDA_ERROR_OUT_OF_MEMORY": "MUSA_ERROR_OUT_OF_MEMORY",
     "CUDA_ERROR_NOT_INITIALIZED": "MUSA_ERROR_NOT_INITIALIZED",
     # =========================================================================
-    # HIP -> MUSA mappings (for USE_ROCM code paths)
-    # =========================================================================
-    "<hip/hip_runtime.h>": "<musa_runtime.h>",
-    "hip/hip_runtime.h": "musa_runtime.h",
-    "<hipcub/hipcub.hpp>": "<cub/cub.cuh>",
-    "hipcub/hipcub.hpp": "cub/cub.cuh",
-    "hipcub::": "cub::",
-    "__hip_bfloat16": "__mt_bfloat16",
-    # =========================================================================
     # THC headers
     # =========================================================================
     "#include <THC/THCAtomics.cuh>": "#include <THC/THCAtomics.muh>",
@@ -530,6 +521,9 @@ __device__ __forceinline__ float fast_rcp(float x) { return __frcp_rn(x); }
     "math::rsqrt(smem[0] / float(d) + eps);": "fast_rsqrtf(smem[0] / float(d) + eps);",
     "math::ptx_rcp(max(sum_low, 1e-8));": "fast_rcp(max(sum_low, 1e-8));",
     "math::ptx_rcp(denom);": "fast_rcp(denom);",
+    # PTX log2/exp2 -> standard math functions
+    "math::ptx_log2": "log2f",
+    "math::ptx_exp2": "exp2f",
     # =========================================================================
     # PTX assembly removal for MUSA
     # MUSA doesn't support NVIDIA PTX assembly. We use "if(0)" to skip all
