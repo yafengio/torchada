@@ -667,3 +667,278 @@ class TestMappingSubstringOrdering:
 
         # And that generic at::cuda also exists
         assert "at::cuda" in _MAPPING_RULE
+
+
+class TestRuntimeNameConversion:
+    """Test runtime name conversion utilities."""
+
+    def test_cuda_to_musa_name(self):
+        """Test CUDA to MUSA function name conversion."""
+        from torchada import cuda_to_musa_name
+
+        # Basic conversions
+        assert cuda_to_musa_name("cudaMalloc") == "musaMalloc"
+        assert cuda_to_musa_name("cudaFree") == "musaFree"
+        assert cuda_to_musa_name("cudaIpcOpenMemHandle") == "musaIpcOpenMemHandle"
+        assert cuda_to_musa_name("cudaIpcGetMemHandle") == "musaIpcGetMemHandle"
+        assert cuda_to_musa_name("cudaMemset") == "musaMemset"
+        assert cuda_to_musa_name("cudaError_t") == "musaError_t"
+
+        # Non-cuda names should be unchanged
+        assert cuda_to_musa_name("someOtherFunc") == "someOtherFunc"
+        assert cuda_to_musa_name("malloc") == "malloc"
+
+    def test_nccl_to_mccl_name(self):
+        """Test NCCL to MCCL function name conversion."""
+        from torchada import nccl_to_mccl_name
+
+        # Basic conversions
+        assert nccl_to_mccl_name("ncclAllReduce") == "mcclAllReduce"
+        assert nccl_to_mccl_name("ncclCommInitRank") == "mcclCommInitRank"
+        assert nccl_to_mccl_name("ncclBroadcast") == "mcclBroadcast"
+        assert nccl_to_mccl_name("ncclUniqueId") == "mcclUniqueId"
+        assert nccl_to_mccl_name("ncclGetErrorString") == "mcclGetErrorString"
+
+        # Non-nccl names should be unchanged
+        assert nccl_to_mccl_name("someOtherFunc") == "someOtherFunc"
+
+    def test_cublas_to_mublas_name(self):
+        """Test cuBLAS to muBLAS function name conversion."""
+        from torchada import cublas_to_mublas_name
+
+        assert cublas_to_mublas_name("cublasCreate") == "mublasCreate"
+        assert cublas_to_mublas_name("cublasSgemm") == "mublasSgemm"
+        assert cublas_to_mublas_name("cublasDestroy") == "mublasDestroy"
+
+        # Non-cublas names should be unchanged
+        assert cublas_to_mublas_name("someOtherFunc") == "someOtherFunc"
+
+    def test_curand_to_murand_name(self):
+        """Test cuRAND to muRAND function name conversion."""
+        from torchada import curand_to_murand_name
+
+        assert curand_to_murand_name("curandCreate") == "murandCreate"
+        assert curand_to_murand_name("curand_init") == "murand_init"
+
+        # Non-curand names should be unchanged
+        assert curand_to_murand_name("someOtherFunc") == "someOtherFunc"
+
+
+class TestCDLLWrapper:
+    """Test ctypes.CDLL wrapper for automatic function name translation.
+
+    These tests load actual MUSA libraries from /usr/local/musa/lib/ and verify
+    that CUDA function names are automatically translated to MUSA equivalents.
+    """
+
+    MUSA_LIB_PATH = "/usr/local/musa/lib"
+
+    def test_cdll_wrapper_class_exists(self):
+        """Test that _CDLLWrapper class is available."""
+        from torchada._patch import _CDLLWrapper
+
+        assert _CDLLWrapper is not None
+
+    @pytest.mark.musa
+    def test_libmusart_cuda_to_musa_translation(self):
+        """Test that CUDA function names are translated when loading libmusart.so."""
+        import ctypes
+        import os
+
+        import torchada  # noqa: F401 - Apply patches
+
+        lib_path = os.path.join(self.MUSA_LIB_PATH, "libmusart.so")
+        if not os.path.exists(lib_path):
+            pytest.skip(f"libmusart.so not found at {lib_path}")
+
+        # Load the library using patched ctypes.CDLL
+        lib = ctypes.CDLL(lib_path)
+
+        # Access using CUDA function names - should be translated to MUSA
+        # These should NOT raise AttributeError because they get translated
+        func = lib.cudaMalloc
+        assert func is not None
+
+        func = lib.cudaFree
+        assert func is not None
+
+        func = lib.cudaGetDevice
+        assert func is not None
+
+        func = lib.cudaIpcOpenMemHandle
+        assert func is not None
+
+        func = lib.cudaIpcGetMemHandle
+        assert func is not None
+
+    @pytest.mark.musa
+    def test_libmccl_nccl_to_mccl_translation(self):
+        """Test that NCCL function names are translated when loading libmccl.so."""
+        import ctypes
+        import os
+
+        import torchada  # noqa: F401 - Apply patches
+
+        lib_path = os.path.join(self.MUSA_LIB_PATH, "libmccl.so")
+        if not os.path.exists(lib_path):
+            pytest.skip(f"libmccl.so not found at {lib_path}")
+
+        # Load the library using patched ctypes.CDLL
+        lib = ctypes.CDLL(lib_path)
+
+        # Access using NCCL function names - should be translated to MCCL
+        func = lib.ncclAllReduce
+        assert func is not None
+
+        func = lib.ncclBroadcast
+        assert func is not None
+
+        func = lib.ncclCommInitRank
+        assert func is not None
+
+    @pytest.mark.musa
+    def test_libmublas_cublas_to_mublas_translation(self):
+        """Test that cuBLAS function names are translated when loading libmublas.so."""
+        import ctypes
+        import os
+
+        import torchada  # noqa: F401 - Apply patches
+
+        lib_path = os.path.join(self.MUSA_LIB_PATH, "libmublas.so")
+        if not os.path.exists(lib_path):
+            pytest.skip(f"libmublas.so not found at {lib_path}")
+
+        # Load the library using patched ctypes.CDLL
+        lib = ctypes.CDLL(lib_path)
+
+        # Access using cuBLAS function names - should be translated to muBLAS
+        # mublasCreate is the actual function name in libmublas.so
+        func = lib.cublasCreate
+        assert func is not None
+
+        func = lib.cublasDestroy
+        assert func is not None
+
+    @pytest.mark.musa
+    def test_libmurand_curand_to_murand_translation(self):
+        """Test that cuRAND function names are translated when loading libmurand.so."""
+        import ctypes
+        import os
+
+        import torchada  # noqa: F401 - Apply patches
+
+        lib_path = os.path.join(self.MUSA_LIB_PATH, "libmurand.so")
+        if not os.path.exists(lib_path):
+            pytest.skip(f"libmurand.so not found at {lib_path}")
+
+        # Load the library using patched ctypes.CDLL
+        lib = ctypes.CDLL(lib_path)
+
+        # Access using cuRAND function names - should be translated to muRAND
+        func = lib.curandCreateGenerator
+        assert func is not None
+
+    @pytest.mark.musa
+    def test_non_musa_lib_no_translation(self):
+        """Test that non-MUSA libraries don't get function name translation."""
+        import ctypes
+
+        import torchada  # noqa: F401 - Apply patches
+
+        # Load a standard library that exists on all systems
+        try:
+            lib = ctypes.CDLL("libc.so.6")
+        except OSError:
+            pytest.skip("libc.so.6 not found")
+
+        # This should NOT be wrapped, so accessing cudaMalloc should fail
+        # (libc doesn't have cudaMalloc or musaMalloc)
+        with pytest.raises(AttributeError):
+            _ = lib.cudaMalloc
+
+    @pytest.mark.musa
+    def test_sglang_cuda_wrapper_pattern(self):
+        """Test that sglang's cuda_wrapper.py pattern works seamlessly with torchada.
+
+        This test simulates the approach used in sglang's cuda_wrapper.py:
+        https://github.com/vllm-project/vllm/blob/v0.6.4.post1/vllm/distributed/device_communicators/cuda_wrapper.py
+
+        The key insight is that sglang uses CUDA function names (cudaMalloc, cudaFree, etc.)
+        when accessing functions from the library. With torchada's ctypes.CDLL patch,
+        these names are automatically translated to MUSA equivalents.
+        """
+        import ctypes
+        import os
+        from dataclasses import dataclass
+        from typing import Any, List
+
+        import torchada  # noqa: F401 - Apply patches
+
+        lib_path = os.path.join(self.MUSA_LIB_PATH, "libmusart.so")
+        if not os.path.exists(lib_path):
+            pytest.skip(f"libmusart.so not found at {lib_path}")
+
+        # === Types from sglang's cuda_wrapper.py ===
+        cudaError_t = ctypes.c_int
+
+        @dataclass
+        class Function:
+            name: str
+            restype: Any
+            argtypes: List[Any]
+
+        # === Subset of exported functions (same as sglang) ===
+        exported_functions = [
+            # cudaError_t cudaSetDevice ( int device )
+            Function("cudaSetDevice", cudaError_t, [ctypes.c_int]),
+            # cudaError_t cudaDeviceSynchronize ( void )
+            Function("cudaDeviceSynchronize", cudaError_t, []),
+            # cudaError_t cudaMalloc ( void** devPtr, size_t size )
+            Function(
+                "cudaMalloc",
+                cudaError_t,
+                [ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t],
+            ),
+            # cudaError_t cudaFree ( void* devPtr )
+            Function("cudaFree", cudaError_t, [ctypes.c_void_p]),
+        ]
+
+        # === Load library using sglang's pattern ===
+        # sglang does: lib = ctypes.CDLL(so_file)
+        lib = ctypes.CDLL(lib_path)
+
+        # === Access functions using CUDA names (sglang's pattern) ===
+        # sglang does: f = getattr(self.lib, func.name)
+        # With torchada, this automatically translates cudaXxx -> musaXxx
+        funcs = {}
+        for func in exported_functions:
+            # This is the key line - sglang uses CUDA names here
+            f = getattr(lib, func.name)
+            f.restype = func.restype
+            f.argtypes = func.argtypes
+            funcs[func.name] = f
+
+        # Verify all functions were loaded successfully
+        assert "cudaSetDevice" in funcs
+        assert "cudaDeviceSynchronize" in funcs
+        assert "cudaMalloc" in funcs
+        assert "cudaFree" in funcs
+
+        # === Actually call the functions to verify they work ===
+        # Set device 0
+        result = funcs["cudaSetDevice"](0)
+        assert result == 0, f"cudaSetDevice failed with error {result}"
+
+        # Allocate memory
+        devPtr = ctypes.c_void_p()
+        result = funcs["cudaMalloc"](ctypes.byref(devPtr), 1024)
+        assert result == 0, f"cudaMalloc failed with error {result}"
+        assert devPtr.value is not None
+
+        # Free memory
+        result = funcs["cudaFree"](devPtr)
+        assert result == 0, f"cudaFree failed with error {result}"
+
+        # Synchronize
+        result = funcs["cudaDeviceSynchronize"]()
+        assert result == 0, f"cudaDeviceSynchronize failed with error {result}"

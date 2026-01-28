@@ -61,6 +61,7 @@ torch.cuda.synchronize()
 | 分布式训练 | `dist.init_process_group(backend='nccl')` → 使用 MCCL |
 | torch.compile | `torch.compile(model)` 支持所有后端 |
 | C++ 扩展 | `CUDAExtension`, `BuildExtension`, `load()` |
+| ctypes 库加载 | `ctypes.CDLL` 使用 CUDA 函数名 → 自动转换为 MUSA |
 
 ## 示例
 
@@ -146,6 +147,21 @@ with torch.profiler.profile(
     model(x)
 ```
 
+### ctypes 库加载
+
+```python
+import torchada
+import ctypes
+
+# 使用 CUDA 函数名加载 MUSA 运行时库
+lib = ctypes.CDLL("libmusart.so")
+func = lib.cudaMalloc  # 自动转换为 musaMalloc
+
+# 同样适用于 MCCL
+nccl_lib = ctypes.CDLL("libmccl.so")
+func = nccl_lib.ncclAllReduce  # 自动转换为 mcclAllReduce
+```
+
 ## 平台检测
 
 ```python
@@ -192,8 +208,14 @@ if torchada.is_gpu_device(device):  # 在 CUDA 和 MUSA 上都能工作
 | `is_cuda_platform()` | 在 CUDA 上运行时返回 True |
 | `is_gpu_device(device)` | 设备是 CUDA 或 MUSA 时返回 True |
 | `CUDA_HOME` | CUDA/MUSA 安装路径 |
+| `cuda_to_musa_name(name)` | 转换 `cudaXxx` → `musaXxx` |
+| `nccl_to_mccl_name(name)` | 转换 `ncclXxx` → `mcclXxx` |
+| `cublas_to_mublas_name(name)` | 转换 `cublasXxx` → `mublasXxx` |
+| `curand_to_murand_name(name)` | 转换 `curandXxx` → `murandXxx` |
 
 **注意**：`torch.cuda.is_available()` 故意没有重定向 — 在 MUSA 上返回 `False`。这是为了支持正确的平台检测。请改用 `torch.musa.is_available()` 或 `is_musa()` 函数。
+
+**注意**：名称转换工具函数可供手动使用，但 `ctypes.CDLL` 已自动打补丁，加载 MUSA 库时会自动转换函数名。
 
 ## C++ 扩展符号映射
 
@@ -216,7 +238,7 @@ if torchada.is_gpu_device(device):  # 在 CUDA 和 MUSA 上都能工作
 
 ```
 # pyproject.toml 或 requirements.txt
-torchada>=0.1.24
+torchada>=0.1.25
 ```
 
 ### 步骤 2：条件导入

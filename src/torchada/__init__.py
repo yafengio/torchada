@@ -23,7 +23,7 @@ Usage:
     from torch.utils.cpp_extension import CUDAExtension, BuildExtension, CUDA_HOME
 """
 
-__version__ = "0.1.24"
+__version__ = "0.1.25"
 
 from . import cuda, utils
 from ._patch import apply_patches, get_original_init_process_group, is_patched
@@ -37,6 +37,12 @@ from ._platform import (
     is_cuda_platform,
     is_gpu_device,
     is_musa_platform,
+)
+from ._runtime import (
+    cublas_to_mublas_name,
+    cuda_to_musa_name,
+    curand_to_murand_name,
+    nccl_to_mccl_name,
 )
 from .utils.cpp_extension import CUDA_HOME
 
@@ -89,4 +95,9 @@ __all__ = [
     "get_original_init_process_group",
     # C++ Extension building
     "CUDA_HOME",
+    # Runtime name conversion utilities
+    "cuda_to_musa_name",
+    "nccl_to_mccl_name",
+    "cublas_to_mublas_name",
+    "curand_to_murand_name",
 ]
