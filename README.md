@@ -61,6 +61,7 @@ That's it! All `torch.cuda.*` APIs are automatically redirected to `torch.musa.*
 | Distributed | `dist.init_process_group(backend='nccl')` → uses MCCL |
 | torch.compile | `torch.compile(model)` with all backends |
 | C++ Extensions | `CUDAExtension`, `BuildExtension`, `load()` |
+| ctypes Libraries | `ctypes.CDLL` with CUDA function names → MUSA equivalents |
 
 ## Examples
 
@@ -146,6 +147,21 @@ with torch.profiler.profile(
     model(x)
 ```
 
+### ctypes Library Loading
+
+```python
+import torchada
+import ctypes
+
+# Load MUSA runtime library with CUDA function names
+lib = ctypes.CDLL("libmusart.so")
+func = lib.cudaMalloc  # Automatically translates to musaMalloc
+
+# Works with MCCL too
+nccl_lib = ctypes.CDLL("libmccl.so")
+func = nccl_lib.ncclAllReduce  # Automatically translates to mcclAllReduce
+```
+
 ## Platform Detection
 
 ```python
@@ -192,8 +208,14 @@ if torchada.is_gpu_device(device):  # Works on both CUDA and MUSA
 | `is_cuda_platform()` | Returns True if running on CUDA |
 | `is_gpu_device(device)` | Returns True if device is CUDA or MUSA |
 | `CUDA_HOME` | Path to CUDA/MUSA installation |
+| `cuda_to_musa_name(name)` | Convert `cudaXxx` → `musaXxx` |
+| `nccl_to_mccl_name(name)` | Convert `ncclXxx` → `mcclXxx` |
+| `cublas_to_mublas_name(name)` | Convert `cublasXxx` → `mublasXxx` |
+| `curand_to_murand_name(name)` | Convert `curandXxx` → `murandXxx` |
 
 **Note**: `torch.cuda.is_available()` is intentionally NOT redirected — it returns `False` on MUSA. This allows proper platform detection. Use `torch.musa.is_available()` or `is_musa()` function instead.
+
+**Note**: The name conversion utilities are exported for manual use, but `ctypes.CDLL` is automatically patched to translate function names when loading MUSA libraries.
 
 ## C++ Extension Symbol Mapping
 

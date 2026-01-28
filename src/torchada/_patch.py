@@ -1065,6 +1065,153 @@ def _patch_autotune_process():
         autotune_process.CUDA_VISIBLE_DEVICES = "MUSA_VISIBLE_DEVICES"
 
 
+class _CDLLWrapper:
+    """
+    Wrapper for ctypes.CDLL that automatically translates CUDA/NCCL function names
+    to MUSA/MCCL equivalents when accessing library functions.
+
+    This allows code that uses ctypes to load CUDA libraries (libcudart, libnccl) and
+    access CUDA-named functions to work transparently on MUSA without code changes.
+
+    Example:
+        # Original code uses CUDA function names:
+        lib = ctypes.CDLL("libmusart.so")
+        func = lib.cudaIpcOpenMemHandle  # Automatically translates to musaIpcOpenMemHandle
+
+        lib = ctypes.CDLL("libmccl.so")
+        func = lib.ncclAllReduce  # Automatically translates to mcclAllReduce
+    """
+
+    # Detect library type from filename patterns
+    _MUSART_PATTERNS = ("libmusart", "musart.so", "libmusa_runtime")
+    _MCCL_PATTERNS = ("libmccl", "mccl.so")
+    _MUBLAS_PATTERNS = ("libmublas", "mublas.so")
+    _MURAND_PATTERNS = ("libmurand", "murand.so")
+
+    def __init__(self, cdll_instance, lib_path: str):
+        # Store the original CDLL instance
+        object.__setattr__(self, "_cdll", cdll_instance)
+        object.__setattr__(self, "_lib_path", lib_path)
+        object.__setattr__(self, "_lib_type", self._detect_lib_type(lib_path))
+
+    def _detect_lib_type(self, lib_path: str) -> str:
+        """Detect the type of library from its path."""
+        lib_path_lower = lib_path.lower()
+        if any(p in lib_path_lower for p in self._MUSART_PATTERNS):
+            return "musart"
+        elif any(p in lib_path_lower for p in self._MCCL_PATTERNS):
+            return "mccl"
+        elif any(p in lib_path_lower for p in self._MUBLAS_PATTERNS):
+            return "mublas"
+        elif any(p in lib_path_lower for p in self._MURAND_PATTERNS):
+            return "murand"
+        return "unknown"
+
+    def _translate_name(self, name: str) -> str:
+        """Translate CUDA/NCCL function name to MUSA/MCCL equivalent."""
+        lib_type = object.__getattribute__(self, "_lib_type")
+
+        if lib_type == "musart":
+            # cudaXxx -> musaXxx
+            if name.startswith("cuda"):
+                return "musa" + name[4:]
+        elif lib_type == "mccl":
+            # ncclXxx -> mcclXxx
+            if name.startswith("nccl"):
+                return "mccl" + name[4:]
+        elif lib_type == "mublas":
+            # cublasXxx -> mublasXxx
+            if name.startswith("cublas"):
+                return "mublas" + name[6:]
+        elif lib_type == "murand":
+            # curandXxx -> murandXxx
+            if name.startswith("curand"):
+                return "murand" + name[6:]
+
+        return name
+
+    def __getattr__(self, name: str):
+        cdll = object.__getattribute__(self, "_cdll")
+        translated_name = self._translate_name(name)
+        return getattr(cdll, translated_name)
+
+    def __setattr__(self, name: str, value):
+        cdll = object.__getattribute__(self, "_cdll")
+        translated_name = self._translate_name(name)
+        setattr(cdll, translated_name, value)
+
+    def __getitem__(self, name: str):
+        cdll = object.__getattribute__(self, "_cdll")
+        translated_name = self._translate_name(name)
+        return cdll[translated_name]
+
+
+# Store original ctypes.CDLL for patching
+_original_ctypes_CDLL = None
+
+
+@patch_function
+def _patch_ctypes_cdll():
+    """
+    Patch ctypes.CDLL to automatically translate CUDA/NCCL function names to MUSA/MCCL.
+
+    This allows code that uses ctypes to directly call CUDA runtime or NCCL functions
+    (like sglang's cuda_wrapper.py and pynccl.py) to work transparently on MUSA
+    without requiring code changes.
+
+    When loading MUSA libraries (libmusart.so, libmccl.so, etc.), the returned CDLL
+    wrapper will automatically translate function name lookups:
+        - cudaXxx -> musaXxx (for libmusart)
+        - ncclXxx -> mcclXxx (for libmccl)
+        - cublasXxx -> mublasXxx (for libmublas)
+        - curandXxx -> murandXxx (for libmurand)
+
+    Example (in sglang):
+        lib = ctypes.CDLL("libmusart.so")
+        # This will automatically find musaIpcOpenMemHandle:
+        func = lib.cudaIpcOpenMemHandle
+    """
+    import ctypes
+
+    global _original_ctypes_CDLL
+
+    # Only patch once
+    if _original_ctypes_CDLL is not None:
+        return
+
+    _original_ctypes_CDLL = ctypes.CDLL
+
+    class PatchedCDLL:
+        """Patched CDLL that wraps MUSA libraries with function name translation."""
+
+        def __new__(cls, name, *args, **kwargs):
+            # Create the original CDLL instance
+            cdll_instance = _original_ctypes_CDLL(name, *args, **kwargs)
+
+            # Check if this is a MUSA library that needs wrapping
+            name_str = str(name) if name else ""
+            if any(
+                pattern in name_str.lower()
+                for pattern in (
+                    "libmusart",
+                    "musart.so",
+                    "libmusa_runtime",
+                    "libmccl",
+                    "mccl.so",
+                    "libmublas",
+                    "mublas.so",
+                    "libmurand",
+                    "murand.so",
+                )
+            ):
+                return _CDLLWrapper(cdll_instance, name_str)
+
+            # For non-MUSA libraries, return the original CDLL instance
+            return cdll_instance
+
+    ctypes.CDLL = PatchedCDLL
+
+
 def apply_patches():
     """
     Apply all necessary patches for CUDA to MUSA translation.
@@ -1087,6 +1234,10 @@ def apply_patches():
     - torch.amp.autocast(device_type='cuda') -> 'musa'
     - torch.utils.cpp_extension (CUDAExtension, BuildExtension) -> MUSA versions
     - torch._inductor.autotune_process.CUDA_VISIBLE_DEVICES -> MUSA_VISIBLE_DEVICES
+    - ctypes.CDLL function name translation for MUSA libraries:
+        - cudaXxx -> musaXxx (for libmusart)
+        - ncclXxx -> mcclXxx (for libmccl)
+        - cublasXxx -> mublasXxx, curandXxx -> murandXxx (for libmublas, libmurand)
 
     This function should be called once at import time.
 
