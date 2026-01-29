@@ -447,6 +447,9 @@ def _get_build_extension_class():
                     """
                     Port a directory containing CUDA sources to MUSA.
 
+                    When both .cu and .mu files exist with the same base name,
+                    the .mu file takes precedence (it's the hand-written MUSA version).
+
                     Args:
                         source_dir: Path to directory containing CUDA sources
                         mapping_rule: Optional custom mapping rules (uses get_mapping_rule() if None)
@@ -458,6 +461,8 @@ def _get_build_extension_class():
                         mapping_rule = self.get_mapping_rule()
 
                     source_dir = os.path.abspath(source_dir)
+                    musa_dir = source_dir + "_musa"
+
                     if source_dir not in self._ported_dirs:
                         musa_sp.LOGGER.setLevel(logging.ERROR)
                         musa_sp.SimplePorting(
@@ -465,7 +470,24 @@ def _get_build_extension_class():
                         ).run()
                         self._ported_dirs.add(source_dir)
 
-                    return source_dir + "_musa"
+                        # After porting, copy any original .mu/.muh files to ensure
+                        # hand-written MUSA files take precedence over ported .cu files.
+                        # This fixes the case where both foo.cu and foo.mu exist -
+                        # SimplePorting processes both, but order is non-deterministic.
+                        import shutil
+
+                        for root, _, files in os.walk(source_dir):
+                            for file in files:
+                                ext = os.path.splitext(file)[1].lower()
+                                if ext in [".mu", ".muh"]:
+                                    src_path = os.path.join(root, file)
+                                    rel_path = os.path.relpath(root, source_dir)
+                                    dst_dir = os.path.join(musa_dir, rel_path)
+                                    dst_path = os.path.join(dst_dir, file)
+                                    os.makedirs(dst_dir, exist_ok=True)
+                                    shutil.copy2(src_path, dst_path)
+
+                    return musa_dir
 
                 def _convert_source_path(self, source):
                     """
@@ -476,7 +498,7 @@ def _get_build_extension_class():
 
                     Returns:
                         tuple: (converted_path, needs_porting)
-                            - converted_path: Path to ported file (e.g., "csrc_musa/kernel.cu")
+                            - converted_path: Path to ported file (e.g., "csrc_musa/kernel.mu")
                             - needs_porting: True if the source directory needs porting
                     """
                     source_path = os.path.abspath(source)
@@ -494,6 +516,17 @@ def _get_build_extension_class():
                         musa_dir = source_dir + "_musa"
                         new_source = os.path.join(musa_dir, base_name + "." + new_ext)
                         return new_source, True
+                    # Handle .mu/.muh files that don't exist at original path
+                    # Try to find them in the _musa directory (already ported files)
+                    elif ext_name_lower in [".mu", ".muh"]:
+                        if not os.path.exists(source_path):
+                            musa_dir = source_dir + "_musa"
+                            musa_source = os.path.join(musa_dir, source_file)
+                            if os.path.exists(musa_source):
+                                # File exists in _musa dir, use it (no porting needed)
+                                return musa_source, False
+                        # File exists at original path, use it as-is
+                        return source, False
                     else:
                         return source, False
 
