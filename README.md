@@ -61,6 +61,7 @@ That's it! All `torch.cuda.*` APIs are automatically redirected to `torch.musa.*
 | Distributed | `dist.init_process_group(backend='nccl')` → uses MCCL |
 | torch.compile | `torch.compile(model)` with all backends |
 | C++ Extensions | `CUDAExtension`, `BuildExtension`, `load()` |
+| FlexAttention | `torch.nn.attention.flex_attention` works on MUSA |
 | ctypes Libraries | `ctypes.CDLL` with CUDA function names → MUSA equivalents |
 
 ## Examples
@@ -254,7 +255,7 @@ See `src/torchada/_mapping.py` for the complete mapping table (380+ mappings).
 
 ```
 # pyproject.toml or requirements.txt
-torchada>=0.1.33
+torchada>=0.1.34
 ```
 
 ### Step 2: Conditional Import
